@@ -1,12 +1,8 @@
 import { useRef } from 'react';
 import { useEffect, useState } from 'react';
-import './App.css';
 
 function App() {
   const [customers, setCustomers] = useState([]);
-  // Kasutame siinkohal dünaamilist väljakuvamist && abil peitmaks lehekülgede sisu
-  // Tegelikult peaks kasutama URL muutusteks ja erineva sisu näitamiseks Reacti moodulit "react-router-dom"
-  // Siinkohal on tehtud see sellel eesmärgil, et oleks võimalik ühe copy-paste abil kogu eesrakenduse sisu võtta
   const url = window.location.href.split(window.location.host)[1];
   const firstNameRef = useRef();
   const lastNameRef = useRef();
@@ -46,10 +42,6 @@ function App() {
     });
   }
 
-  // SIIT ALLAPOOLE VÕIKS OLLA ERALDI COMPONENT, aga lihtsuse huvides 
-  // (et saaks ühe ülevalt alla copy-paste abil eesrakenduse koodi implementeerida),
-  // on kogu React kood ühe faili all.
-
   const [customerUsages, setCustomerUsages] = useState([]);
   const [customerSum, setCustomerSum] = useState(-1);
   const [usagesShownCustomerId, setUsagesShownCustomerId] = useState(-1);
@@ -72,10 +64,6 @@ function App() {
       setCustomerSum(json);
     });
   }
-
-  // SIIT ALLAPOOLE VÕIKS OLLA ERALDI COMPONENT, aga lihtsuse huvides 
-  // (et saaks ühe ülevalt alla copy-paste abil eesrakenduse koodi implementeerida),
-  // on kogu React kood ühe faili all.
 
   const startTimeRef = useRef();
   const endTimeRef = useRef();
@@ -100,10 +88,6 @@ function App() {
           setAddUsageCustomerId(-1);
     });
   }
-
-  // SIIT ALLAPOOLE VÕIKS OLLA ERALDI COMPONENT, aga lihtsuse huvides 
-  // (et saaks ühe ülevalt alla copy-paste abil eesrakenduse koodi implementeerida),
-  // on kogu React kood ühe faili all.
 
   const [devices, setDevices] = useState([]);
   const [deviceSelected, setDeviceSelected] = useState(-1);
@@ -145,32 +129,45 @@ function App() {
     });
   }
 
-  // SIIT ALLAPOOLE VÕIKS OLLA ERALDI COMPONENT, aga lihtsuse huvides 
-  // (et saaks ühe ülevalt alla copy-paste abil eesrakenduse koodi implementeerida),
-  // on kogu React kood ühe faili all.
-
   const [usages, setUsages] = useState([]);
   const [start, setStart] = useState(null);
   const [end, setEnd] = useState(null);
+  const [filterByEnd, setFilterByEnd] = useState(false);
   const startRef = useRef();
   const endRef = useRef();
 
   useEffect(() => {
     if (start !== null && end !== null) {
-      fetch("https://localhost:7134/api/usage-start-period?startDate=" + start + "&endDate=" + end)
-        .then(res => res.json())
-        .then(json => {
-          console.log(json);
-          setUsages(json);
+      const endpoint = filterByEnd ? "usage/usage-end-period" : "usage/usage-start-period";
+      fetch("https://localhost:7134/api/" + endpoint + "?startDate=" + start + "&endDate=" + end)
+        .then(res => {
+          if (!res.ok) {
+            throw new Error(`HTTP error! status: ${res.status}`);
+          }
+          return res.text();
+        })
+        .then(text => {
+          console.log("Response:", text);
+          if (text) {
+            const json = JSON.parse(text);
+            setUsages(json);
+          } else {
+            setUsages([]);
+          }
+        })
+        .catch(error => {
+          console.error('Fetch error:', error);
+          setUsages([]);
         });
     } else {
       fetch("https://localhost:7134/api/usage")
         .then(res => res.json())
         .then(json => {
           setUsages(json);
-        });
+        })
+        .catch(error => console.error('Fetch error:', error));
     }
-  }, [start, end]);
+  }, [start, end, filterByEnd]);
 
   function updateStart() {
     const startIso = new Date(startRef.current.value).toISOString();
@@ -180,6 +177,18 @@ function App() {
   function updateEnd() {
     const endIso = new Date(endRef.current.value).toISOString();
     setEnd(endIso);
+  }
+
+  function deleteUsage(usageId) {
+    fetch("https://localhost:7134/api/usage/" + usageId, { method: "DELETE" })
+      .then(res => {
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        return res.json();
+      })
+      .then(json => setUsages(json))
+      .catch(error => console.error('Fetch error:', error));
   }
 
   const navigationStyles = {
@@ -276,14 +285,14 @@ function App() {
           </tbody>
         </table>
         <div>
-          {customerUsages.length > 0 && <div>{customerUsages.map(e => <div>Tarbimine ID-ga: {e.id}, summas {e.totalUsageCost} €</div>)}</div>}
+          {customerUsages.length > 0 && <div>{customerUsages.map(e => <div key={e.id}>Tarbimine ID-ga: {e.id}, summas {e.totalUsageCost} €</div>)}</div>}
           {customerUsages.length > 0 && customerSum === -1 && <button onClick={getCustomerSum}>Näita kogusummat</button> }
           {customerUsages.length > 0 && customerSum !== -1 && <div>{customerSum} €</div> }
           {usagesShownCustomerId >= 0 && customerUsages.length === 0 && <div>Tarbijal pole ühtegi kasutuskorda.</div>}
         </div>
         {addUsageCustomerId !== -1 &&
         <div>
-          <div><b>Lisad kasutajale {customers.find(e => e.id === Number(addUsageCustomerId)).firstName} uut kasutuskorda</b></div>
+          <div><b>Lisad kasutajale {customers.find(e => e.id === Number(addUsageCustomerId))?.firstName} uut kasutuskorda</b></div>
           Seade:
           <select onChange={selectDevice}>
             {devices.map((data, index) => <option key={index} value={data.id}>{data.name} ({data.watts} watti)</option> )}
@@ -319,10 +328,29 @@ function App() {
         </div> }
         { url === "/kasutused" && 
           <div>
-            <div>Filtreeri algusaja järgi:</div>
-            <input ref={startRef} onChange={updateStart} type="datetime-local" />
-            <input ref={endRef} onChange={updateEnd} type="datetime-local" />
-            <table style={{marginLeft: "2%"}}>
+            <div style={{marginLeft: "2%", marginTop: "20px"}}>
+              <label>
+                <input 
+                  type="radio" 
+                  name="filterType" 
+                  checked={!filterByEnd} 
+                  onChange={() => setFilterByEnd(false)}
+                /> Filtreeri algusaja järgi
+              </label>
+              <label style={{marginLeft: "20px"}}>
+                <input 
+                  type="radio" 
+                  name="filterType" 
+                  checked={filterByEnd} 
+                  onChange={() => setFilterByEnd(true)}
+                /> Filtreeri lõpuaja järgi
+              </label>
+            </div>
+            <div style={{marginLeft: "2%", marginTop: "10px"}}>
+              <input ref={startRef} onChange={updateStart} type="datetime-local" />
+              <input ref={endRef} onChange={updateEnd} type="datetime-local" style={{marginLeft: "10px"}} />
+            </div>
+            <table style={{marginLeft: "2%", marginTop: "20px"}}>
               <thead>
                 <tr>
                   <th style={{border: "1px solid #ddd", padding: "12px", backgroundColor: "#04AA6D"}}>Kasutaja</th>
@@ -330,6 +358,7 @@ function App() {
                   <th style={{border: "1px solid #ddd", padding: "12px", backgroundColor: "#04AA6D"}}>Algus</th>
                   <th style={{border: "1px solid #ddd", padding: "12px", backgroundColor: "#04AA6D"}}>Lõpp</th>
                   <th style={{border: "1px solid #ddd", padding: "12px", backgroundColor: "#04AA6D"}}>Maksumus</th>
+                  <th style={{border: "1px solid #ddd", padding: "12px", backgroundColor: "#04AA6D"}}>Tegevused</th>
                 </tr>
               </thead>
               <tbody>
@@ -340,8 +369,10 @@ function App() {
                   <td style={{border: "1px solid #ddd", padding: "8px"}}>{data.start}</td>
                   <td style={{border: "1px solid #ddd", padding: "8px"}}>{data.end}</td>
                   <td style={{border: "1px solid #ddd", padding: "8px"}}>{data.totalUsageCost}</td>
+                  <td style={{border: "1px solid #ddd", padding: "8px"}}>
+                    <button onClick={() => deleteUsage(data.id)}>Kustuta</button>
+                  </td>
                 </tr>)}
-  
               </tbody>
             </table>
           </div>
